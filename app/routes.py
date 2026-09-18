@@ -30,11 +30,18 @@ def create_todo(todo: schemas.TodoCreate, db: Session = Depends(get_db)):
     return new_todo
 
 @router.put("/{todo_id}", response_model=schemas.TodoResponse)
-def update_todo(todo_id: int, todo: schemas.TodoCreate, db: Session = Depends(get_db)):
+def update_todo(todo_id: int, todo: schemas.TodoUpdate, db: Session = Depends(get_db)):
     todo_update = db.scalars(select(models.Todo).where(models.Todo.id == todo_id)).first()
     if not todo_update:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Todo not found")
-    for key, value in todo.model_dump().items():
+    # Partial update: apply only the fields explicitly present in the request body,
+    # never overwrite unspecified fields with defaults.
+    updates = todo.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update"
+        )
+    for key, value in updates.items():
         setattr(todo_update, key, value)
     db.commit()
     db.refresh(todo_update)

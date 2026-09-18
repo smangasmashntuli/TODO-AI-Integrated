@@ -1,12 +1,14 @@
 from fastapi import FastAPI
-from .database import engine
+from .database import engine, run_migrations
 from .models import Base
-from . import routes
+from . import routes, routes_ai
 
 app = FastAPI(title="TODO API", version="1.0.0")
 
 Base.metadata.create_all(bind=engine)
+run_migrations()
 app.include_router(routes.router)
+app.include_router(routes_ai.router)
 
 @app.get("/")
 def root():
