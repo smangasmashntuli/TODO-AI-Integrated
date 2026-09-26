@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TODO AI</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>TODO AI</h1>
+    <span id="api-status" class="status status--checking">checking API…</span>
+  </header>
+
+  <main>
+    <!-- Phase 1: Smart Task Input -->
+    <section class="panel" id="smart-input">
+      <h2>Smart Task Input</h2>
+      <p class="hint">
+        Describe a task in plain language. The AI extracts fields and you review
+        them before anything is saved.
+      </p>
+      <textarea id="nl-input" rows="3"
+        placeholder="Finish the Q4 report by EOD Friday and share it with Sarah."></textarea>
+      <div class="row">
+        <button id="parse-btn" class="primary">Parse with AI</button>
+      </div>
+      <div id="parse-result" class="result hidden"></div>
+    </section>
+
+    <!-- Priority 3: Intelligent Prioritization -->
+    <section class="panel" id="prioritize">
+      <h2>Intelligent Prioritization</h2>
+      <p class="hint">
+        Ranks open tasks and checks the workload. Nothing is stored until you
+        review and apply.
+      </p>
+      <div class="row">
+        <label class="field field--inline">
+          <span>Available hours</span>
+          <input id="available-hours" type="number" min="0" step="0.5"
+            placeholder="optional" />
+        </label>
+        <button id="prioritize-btn" class="primary">Prioritize</button>
+      </div>
+      <div id="prioritize-result" class="result hidden"></div>
+    </section>
+
+    <!-- Priority 6: Smart Reminders -->
+    <section class="panel" id="reminders">
+      <div class="row row--between">
+        <h2>Smart Reminders</h2>
+        <button id="reminders-btn">Refresh</button>
+      </div>
+      <p class="hint">
+        In-app reminders for open tasks due within 3 days, with escalation when
+        an imminent task has not started.
+      </p>
+      <ul id="reminder-list" class="reminder-list"></ul>
+      <p id="reminders-empty" class="hint hidden">Nothing needs a reminder right now.</p>
+    </section>
+
+    <!-- CRUD task list -->
+    <section class="panel" id="tasks">
+      <div class="row row--between">
+        <h2>Tasks</h2>
+        <div class="row">
+          <label class="sr-only" for="filter">Filter tasks</label>
+          <select id="filter">
+            <option value="open" selected>Open</option>
+            <option value="all">All</option>
+            <option value="done">Completed</option>
+          </select>
+          <button id="new-task-btn">New task</button>
+        </div>
+      </div>
+      <p class="hint" id="selection-hint"></p>
+      <ul id="task-list" class="task-list"></ul>
+      <p id="tasks-empty" class="hint hidden">No tasks to show.</p>
+    </section>
+  </main>
+
+  <!-- Task editor: used for manual create/edit and for confirming AI suggestions -->
+  <dialog id="editor-dialog">
+    <form id="task-form">
+      <h2 id="editor-title">New task</h2>
+
+      <label class="field field--wide">
+        <span>Title</span>
+        <input id="f-title" required maxlength="200" />
+      </label>
+
+      <label class="field field--wide">
+        <span>Description</span>
+        <textarea id="f-description" rows="2"></textarea>
+      </label>
+
+      <label class="field">
+        <span>Due date</span>
+        <input id="f-due-date" type="datetime-local" />
+      </label>
+
+      <label class="field">
+        <span>Effort (hours)</span>
+        <input id="f-effort" type="number" min="0" step="0.5" />
+      </label>
+
+      <label class="field">
+        <span>Urgency</span>
+        <select id="f-urgency">
+          <option value="">—</option>
+          <option value="low">low</option>
+          <option value="medium">medium</option>
+          <option value="high">high</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Category</span>
+        <input id="f-category" maxlength="100" />
+      </label>
+
+      <label class="field">
+        <span>Project</span>
+        <input id="f-project" maxlength="200" />
+      </label>
+
+      <label class="field">
+        <span>Area of focus</span>
+        <input id="f-area" maxlength="200" />
+      </label>
+
+      <label class="field field--wide">
+        <span>Assignees <em>(comma separated)</em></span>
+        <input id="f-assignees" />
+      </label>
+
+      <label class="field field--wide">
+        <span>Skills required <em>(comma separated)</em></span>
+        <input id="f-skills" />
+      </label>
+
+      <label class="field field--wide">
+        <span>Subtasks <em>(one per line)</em></span>
+        <textarea id="f-subtasks" rows="3"></textarea>
+      </label>
+
+      <label class="field field--wide">
+        <span>Context</span>
+        <textarea id="f-context" rows="2"></textarea>
+      </label>
+
+      <fieldset class="field field--wide">
+        <legend>AI scores (0–1)</legend>
+        <div class="row">
+          <label class="field"><span>Priority</span><input id="f-priority" type="number" min="0" max="1" step="0.05" /></label>
+          <label class="field"><span>Impact</span><input id="f-impact" type="number" min="0" max="1" step="0.05" /></label>
+          <label class="field"><span>Feasibility</span><input id="f-feasibility" type="number" min="0" max="1" step="0.05" /></label>
+          <label class="field"><span>Confidence</span><input id="f-confidence" type="number" min="0" max="1" step="0.05" /></label>
+        </div>
+      </fieldset>
+
+      <div class="row row--between field--wide">
+        <label class="field field--inline">
+          <span>Completed</span>
+          <input id="f-completed" type="checkbox" />
+        </label>
+        <label class="field field--inline">
+          <span>Created from</span>
+          <select id="f-created-from">
+            <option value="ui">ui</option>
+            <option value="natural_language">natural_language</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row row--end field--wide">
+        <button type="button" id="editor-cancel">Cancel</button>
+        <button type="submit" class="primary">Save task</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
