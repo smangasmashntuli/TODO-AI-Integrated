@@ -72,6 +72,10 @@ function toast(message, kind = "") {
 function reportError(error) {
   if (error.status === 503) {
     toast("AI is not configured. Set GEMINI_API_KEY on the server to enable AI features.", "warn");
+  } else if (error.status === 429) {
+    toast(error.message || "The AI model is temporarily busy. Please try again in a few seconds.", "warn");
+  } else if (error.status === 504) {
+    toast(error.message || "The AI request timed out. Please try again.", "warn");
   } else if (error.status === 502) {
     toast(error.message || "The AI provider failed. Please try again.", "error");
   } else {
@@ -460,6 +464,7 @@ function openEditor(todo, prefill) {
   setValue("#f-description", source.description);
   $("#f-due-date").value = toLocalInput(source.due_date);
   setValue("#f-effort", source.effort_hours);
+  setValue("#f-actual-effort", source.actual_effort_hours);
   setValue("#f-urgency", source.urgency || "");
   setValue("#f-category", source.category);
   setValue("#f-project", source.project);
@@ -502,6 +507,7 @@ function formPayload() {
     completed: $("#f-completed").checked,
     due_date: textOrNull("#f-due-date"),
     effort_hours: numberOrNull("#f-effort"),
+    actual_effort_hours: numberOrNull("#f-actual-effort"),
     urgency: textOrNull("#f-urgency"),
     category: textOrNull("#f-category"),
     project: textOrNull("#f-project"),
