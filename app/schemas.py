@@ -192,3 +192,24 @@ class Reminder(BaseModel):
     due_date: datetime
     level: str = Field(pattern="^(info|warning|urgent)$")
     message: str
+
+
+# Priority 7 (Historical Learning) - derived read-only from completed tasks.
+# effort_hours stays the AI estimate; actual_effort_hours is what really happened.
+class CategoryEstimateAccuracy(BaseModel):
+    category: str
+    sample_size: int
+    avg_estimate: float | None = None  # AI estimate (effort_hours)
+    avg_actual: float | None = None     # actual behaviour (actual_effort_hours)
+    buffer: float | None = Field(default=None, ge=0)  # actual / estimate ratio
+
+
+class LearningProfile(BaseModel):
+    confidence: str = Field(pattern="^(insufficient_data|ok)$")
+    sample_size: int
+    message: str
+    estimate_accuracy_by_category: list[CategoryEstimateAccuracy] = []
+    typical_effort_buffer: float | None = Field(default=None, ge=0)
+    completion_share_by_day: dict[str, int] = {}  # e.g. {"Mon": 12, "Tue": 3}
+    peak_hours: list[str] = []  # e.g. ["09:00-10:00"]
+    recurring_tasks: list[str] = []  # titles/categories seen often enough to template
