@@ -179,4 +179,26 @@ legend { font-size: 13px; color: var(--muted); font-weight: 600; padding: 0 4px;
 .toast--error { background: var(--danger); }
 .toast--warn { background: var(--warn); }
 .toast--ok { background: var(--ok); }
+.toast--alarm { background: #7c3aed; }
+
+/* In-app calendar (Priority 8) -------------------------------------------- */
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cal-day {
+  border: 1px solid #e7ebf3; border-radius: 8px; padding: 6px;
+  min-height: 96px; background: #fbfcfe;
+}
+.cal-day--today { border-color: #7c3aed; background: #f7f4ff; }
+.cal-day-label { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+.cal-task {
+  display: flex; flex-direction: column; gap: 2px; width: 100%;
+  text-align: left; margin-bottom: 4px; padding: 4px 6px;
+  border: 1px solid #dde4f7; border-left-width: 3px; border-radius: 6px;
+  background: #eef2fd; color: #33436b; font-size: 12px; cursor: pointer;
+}
+.cal-task:hover { filter: brightness(0.97); }
+.cal-task-time { font-weight: 600; }
+.cal-task-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-task--high { border-left-color: #d6453a; background: #fdecea; color: #9b2c20; }
+.cal-task--medium { border-left-color: #d9a441; background: #fdf5e6; color: #8a621c; }
+.cal-task--low { border-left-color: #3aa76d; background: #eaf7ef; color: #2b6a48; }
 

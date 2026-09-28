@@ -116,6 +116,7 @@ const aiApi = {
   breakdown: (taskId) => api(`/api/tasks/${taskId}/breakdown`, { method: "POST" }),
   nextAction: (taskId) => api(`/api/tasks/${taskId}/next-action`, { method: "POST" }),
   reminders: () => api("/api/tasks/reminders"),
+  learning: () => api("/api/tasks/learning"),
 };
 
 const state = {
@@ -130,7 +131,9 @@ const state = {
 async function boot() {
   bindEvents();
   await checkApi();
-  await loadTasks(); // also refreshes reminders
+  await loadTasks(); // also refreshes reminders + calendar
+  tickAlarms();      // ring alarms already due, then keep watching
+  setInterval(tickAlarms, 30 * 1000);
 }
 
 async function checkApi() {
@@ -151,9 +154,50 @@ async function loadTasks() {
     pruneSelection();
     renderTasks();
     await loadReminders(); // reminders depend on task state
+    await loadLearning();  // so does the learning profile
+    renderCalendar();      // calendar draws from the same task state
   } catch (error) {
     reportError(error);
   }
+}
+
+async function loadLearning(button) {
+  await withBusy(button, async () => {
+    const profile = await aiApi.learning();
+    $("#learning-result").replaceChildren(...renderLearning(profile));
+    $("#learning-result").classList.remove("hidden");
+  });
+}
+
+function renderLearning(profile) {
+  const rows = [
+    h("p", { class: "hint" },
+      `${profile.confidence === "ok" ? "✓" : "—"} ${profile.message}`),
+  ];
+  for (const cat of profile.estimate_accuracy_by_category) {
+    rows.push(h("div", { class: "field-why" },
+      h("strong", { text: `${cat.category} (n=${cat.sample_size}): ` }),
+      `estimate ${cat.avg_estimate ?? "n/a"}h → actual ${cat.avg_actual ?? "n/a"}h` +
+      (cat.buffer ? ` (buffer ×${cat.buffer})` : "")));
+  }
+  if (profile.typical_effort_buffer != null) {
+    rows.push(h("div", { class: "field-why",
+      text: `Typical effort buffer: ×${profile.typical_effort_buffer}` }));
+  }
+  const days = Object.entries(profile.completion_share_by_day);
+  if (days.length) {
+    rows.push(h("div", { class: "field-why",
+      text: `Completions by day: ${days.map(([d, n]) => `${d} ${n}`).join(", ")}` }));
+  }
+  if (profile.peak_hours.length) {
+    rows.push(h("div", { class: "field-why",
+      text: `Peak completion hours: ${profile.peak_hours.join(", ")}` }));
+  }
+  for (const title of profile.recurring_tasks) {
+    rows.push(h("div", { class: "field-why",
+      text: `Recurring: “${title}” — consider a task template.` }));
+  }
+  return rows;
 }
 
 async function loadReminders(button) {
@@ -171,6 +215,119 @@ function reminderItem(reminder) {
     h("span", { class: "field-name", text: reminder.title }),
     h("div", { class: "field-why", text: reminder.message }),
   );
+}
+
+/* ------------------------------------------------------ in-app calendar (P8) */
+
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const calState = { weekStart: startOfWeek(new Date()) };
+
+function startOfWeek(date) {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  copy.setDate(copy.getDate() - copy.getDay()); // week starts Sunday
+  return copy;
+}
+
+function dayKey(date) {
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function renderCalendar() {
+  const grid = $("#cal-grid");
+  const end = new Date(calState.weekStart);
+  end.setDate(end.getDate() + 6);
+  $("#cal-range").textContent =
+    `${calState.weekStart.toLocaleDateString()} – ${end.toLocaleDateString()}`;
+
+  const byDay = new Map();
+  for (const todo of state.todos) {
+    if (!todo.due_date || todo.completed) continue;
+    const due = new Date(todo.due_date);
+    if (Number.isNaN(due.getTime())) continue;
+    const key = dayKey(due);
+    if (!byDay.has(key)) byDay.set(key, []);
+    byDay.get(key).push(todo);
+  }
+
+  const todayKey = dayKey(new Date());
+  const columns = [];
+  for (let i = 0; i < 7; i += 1) {
+    const day = new Date(calState.weekStart);
+    day.setDate(day.getDate() + i);
+    const todos = (byDay.get(dayKey(day)) || []).sort(
+      (a, b) => new Date(a.due_date) - new Date(b.due_date));
+    columns.push(h("div", { class: `cal-day${dayKey(day) === todayKey ? " cal-day--today" : ""}` },
+      h("div", { class: "cal-day-label", text: `${DAY_NAMES[day.getDay()]} ${day.getDate()}` }),
+      ...todos.map(todo => h("button", {
+        class: `cal-task${urgencyClass(todo)}`,
+        title: `Due ${formatDate(todo.due_date)} — click to edit`,
+        onclick: () => openEditor(todo),
+      },
+        h("span", { class: "cal-task-time", text: new Date(todo.due_date).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }),
+        h("span", { class: "cal-task-title", text: todo.title }),
+      )),
+    ));
+  }
+  grid.replaceChildren(...columns);
+  $("#cal-empty").classList.toggle("hidden", byDay.size > 0);
+}
+
+function urgencyClass(todo) {
+  return todo.urgency ? ` cal-task--${todo.urgency}` : "";
+}
+
+function shiftWeek(days) {
+  calState.weekStart = new Date(calState.weekStart);
+  calState.weekStart.setDate(calState.weekStart.getDate() + days);
+  renderCalendar();
+}
+
+/* ------------------------------------------------- in-app alarms (T-15min, due)
+
+   In-app only (Rules 5.6: no notification channels the app does not support).
+   Each (task, alarm type, due instant) fires at most once. Alarms that were
+   missed while the tab was closed are not replayed - a stale alarm is noise. */
+
+const alarmFired = new Set();
+const ALARM_LEAD_MS = 15 * 60 * 1000;
+const ALARM_GRACE_MS = 60 * 1000; // fire only within a minute of crossing the mark
+
+function tickAlarms() {
+  const now = Date.now();
+  for (const todo of state.todos) {
+    if (todo.completed || !todo.due_date) continue;
+    const due = new Date(todo.due_date).getTime();
+    if (Number.isNaN(due)) continue;
+    fireAlarm(todo, "due in 15 minutes", due - ALARM_LEAD_MS, now);
+    fireAlarm(todo, "is due now", due, now);
+  }
+}
+
+function fireAlarm(todo, label, at, now) {
+  const key = `${todo.id}|${at}`;
+  if (alarmFired.has(key) || now < at || now - at > ALARM_GRACE_MS) return;
+  alarmFired.add(key);
+  toast(`⏰ ${todo.title} ${label}.`, "alarm");
+  beep();
+}
+
+let audioCtx = null;
+function beep() {
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.5);
+  } catch {
+    // Audio unavailable (browser policy / no device) - the toast still shows.
+  }
 }
 
 function pruneSelection() {
@@ -725,6 +882,13 @@ function bindEvents() {
   $("#parse-btn").addEventListener("click", (event) => runParse(event.target));
   $("#prioritize-btn").addEventListener("click", (event) => runPrioritize(event.target));
   $("#reminders-btn").addEventListener("click", (event) => loadReminders(event.target));
+  $("#learning-btn").addEventListener("click", (event) => loadLearning(event.target));
+  $("#cal-prev").addEventListener("click", () => shiftWeek(-7));
+  $("#cal-next").addEventListener("click", () => shiftWeek(7));
+  $("#cal-today").addEventListener("click", () => {
+    calState.weekStart = startOfWeek(new Date());
+    renderCalendar();
+  });
   $("#new-task-btn").addEventListener("click", () => openEditor(null, null));
   $("#editor-cancel").addEventListener("click", () => $("#editor-dialog").close());
   $("#task-form").addEventListener("submit", saveTask);

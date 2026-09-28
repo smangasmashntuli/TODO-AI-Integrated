@@ -60,6 +60,39 @@
       <p id="reminders-empty" class="hint hidden">Nothing needs a reminder right now.</p>
     </section>
 
+    <!-- Priority 8 (Option B): in-app calendar -->
+    <section class="panel" id="calendar">
+      <div class="row row--between">
+        <h2>Calendar</h2>
+        <div class="row">
+          <button id="cal-prev" title="Previous week">‹</button>
+          <button id="cal-today">Today</button>
+          <button id="cal-next" title="Next week">›</button>
+        </div>
+      </div>
+      <p class="hint">
+        Week view of dated tasks. Click a task to edit it. In-app alarms ring
+        15 minutes before a task is due and again when it is due.
+      </p>
+      <div id="cal-range" class="hint"></div>
+      <div id="cal-grid" class="cal-grid"></div>
+      <p id="cal-empty" class="hint hidden">No dated tasks this week.</p>
+    </section>
+
+    <!-- Priority 7: Historical Learning -->
+    <section class="panel" id="learning">
+      <div class="row row--between">
+        <h2>Historical Learning</h2>
+        <button id="learning-btn">Refresh</button>
+      </div>
+      <p class="hint">
+        Patterns derived from completed tasks only — estimates and actual
+        behaviour are kept separate, and nothing is claimed until there is
+        enough history.
+      </p>
+      <div id="learning-result" class="result hidden"></div>
+    </section>
+
     <!-- CRUD task list -->
     <section class="panel" id="tasks">
       <div class="row row--between">
