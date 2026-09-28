@@ -330,6 +330,110 @@ def learning_confidence(completed_tasks: list) -> str:
     return "ok"
 
 
+# --- Priority 7 (Historical Learning) -------------------------------------
+# Deterministic: derived from completed-task history only, never invented.
+
+_DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+_RECURRING_MIN = 3  # a title seen at least this often is worth templating
+
+
+def _paired_efforts(tasks) -> list[tuple[float, float]]:
+    """(ai_estimate, actual) pairs - both must exist to judge accuracy."""
+    return [
+        (task.effort_hours, task.actual_effort_hours)
+        for task in tasks
+        if task.effort_hours is not None and task.actual_effort_hours is not None
+    ]
+
+
+def _accuracy_by_category(tasks) -> list[schemas.CategoryEstimateAccuracy]:
+    by_category: dict[str, list] = {}
+    for task in tasks:
+        if task.actual_effort_hours is not None:
+            by_category.setdefault(task.category or "Uncategorized", []).append(task)
+
+    results = []
+    for category, items in sorted(by_category.items()):
+        pairs = _paired_efforts(items)
+        if not pairs:  # no estimate/actual pair -> nothing to compare, claim nothing
+            continue
+        avg_estimate = round(sum(p[0] for p in pairs) / len(pairs), 2)
+        avg_actual = round(sum(p[1] for p in pairs) / len(pairs), 2)
+        buffer = round(avg_actual / avg_estimate, 2) if avg_estimate else None
+        results.append(schemas.CategoryEstimateAccuracy(
+            category=category,
+            sample_size=len(pairs),
+            avg_estimate=avg_estimate,
+            avg_actual=avg_actual,
+            buffer=buffer,
+        ))
+    return results
+
+
+def _typical_buffer(tasks) -> float | None:
+    pairs = _paired_efforts(tasks)
+    if not pairs:
+        return None
+    avg_estimate = sum(p[0] for p in pairs) / len(pairs)
+    return round(sum(p[1] for p in pairs) / len(pairs) / avg_estimate, 2) if avg_estimate else None
+
+
+def _completion_share_by_day(tasks) -> dict[str, int]:
+    share: dict[str, int] = {day: 0 for day in _DAY_NAMES}
+    for task in tasks:
+        if task.completed_at:
+            share[_DAY_NAMES[task.completed_at.weekday()]] += 1
+    return {day: count for day, count in share.items() if count}
+
+
+def _peak_hours(tasks) -> list[str]:
+    """Hour-of-day histogram of completions -> top bucket(s), 0 if no data."""
+    counts: dict[int, int] = {}
+    for task in tasks:
+        if task.completed_at:
+            counts[task.completed_at.hour] = counts.get(task.completed_at.hour, 0) + 1
+    if not counts:
+        return []
+    top = max(counts.values())
+    return [f"{hour:02d}:00-{(hour + 1) % 24:02d}:00" for hour, n in sorted(counts.items()) if n == top]
+
+
+def _recurring_tasks(tasks) -> list[str]:
+    titles: dict[str, int] = {}
+    for task in tasks:
+        key = task.title.strip().lower()
+        titles[key] = titles.get(key, 0) + 1
+    return sorted(title for title, n in titles.items() if n >= _RECURRING_MIN)
+
+
+def build_learning_profile(completed_tasks: list) -> schemas.LearningProfile:
+    """Read-only learning profile from completed history (Rules: Historical Learning).
+
+    Gate first: below MIN_HISTORY_FOR_LEARNING everything is empty and
+    confidence = 'insufficient_data' - no pattern is ever claimed without data.
+    """
+    confidence = learning_confidence(completed_tasks)
+    sample = len(completed_tasks)
+    if confidence == "insufficient_data":
+        return schemas.LearningProfile(
+            confidence=confidence,
+            sample_size=sample,
+            message=f"Insufficient data: {sample} completed task(s); "
+                    f"at least {MIN_HISTORY_FOR_LEARNING} are needed before any pattern is claimed.",
+        )
+
+    return schemas.LearningProfile(
+        confidence=confidence,
+        sample_size=sample,
+        message=f"Learned from {sample} completed task(s).",
+        estimate_accuracy_by_category=_accuracy_by_category(completed_tasks),
+        typical_effort_buffer=_typical_buffer(completed_tasks),
+        completion_share_by_day=_completion_share_by_day(completed_tasks),
+        peak_hours=_peak_hours(completed_tasks),
+        recurring_tasks=_recurring_tasks(completed_tasks),
+    )
+
+
 def _normalize_result(result: schemas.TaskParseResult) -> schemas.TaskParseResult:
     """Normalize None arrays to empty lists for a consistent API response."""
     data = result.model_dump()
