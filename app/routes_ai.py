@@ -177,3 +177,21 @@ def list_reminders(db: Session = Depends(get_db)):
         select(models.Todo).where(models.Todo.completed.is_(False))
     ).all()
     return services.build_reminders(tasks)
+
+
+@router.get(
+    "/learning",
+    response_model=schemas.LearningProfile,
+    summary="Learned patterns from completed-task history",
+)
+def learning_profile(db: Session = Depends(get_db)):
+    """Priority 7: read-only learning profile (Rules: Historical Learning).
+
+    Deterministic, no AI call. Only completed tasks are considered; below
+    MIN_HISTORY_FOR_LEARNING the profile reports confidence='insufficient_data'
+    with no patterns rather than inventing one.
+    """
+    completed = db.scalars(
+        select(models.Todo).where(models.Todo.completed.is_(True))
+    ).all()
+    return services.build_learning_profile(completed)
