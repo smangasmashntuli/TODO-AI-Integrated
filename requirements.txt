@@ -1,0 +1,10 @@
+fastapi==0.141.1
+uvicorn==0.52.4
+sqlalchemy==2.0.52
+pydantic==2.13.5
+google-genai>=2.23.0
+python-dotenv>=1.2.3
+
+# Development / testing
+pytest>=9.1.1
+httpx2>=2.13.0

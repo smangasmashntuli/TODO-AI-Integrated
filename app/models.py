@@ -19,6 +19,16 @@ class Todo(Base):
     context: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     effort_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    project: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    area_of_focus: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    skills_required: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    urgency: Mapped[str | None] = mapped_column(String(10), nullable=True)
     priority_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    impact_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    feasibility_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     confidence_level: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_from: Mapped[str] = mapped_column(String(50), default="ui")
+    # Phase 2 prerequisite (Rules.md section 7): actual behaviour, kept separate from
+    # the AI estimate in effort_hours so history is never confused with a prediction.
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    actual_effort_hours: Mapped[float | None] = mapped_column(Float, nullable=True)

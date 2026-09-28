@@ -9,3 +9,12 @@ GET http://127.0.0.1:8000/hello/User
 Accept: application/json
 
 ###
+### Parse a natural-language task (requires GEMINI_API_KEY)
+POST http://127.0.0.1:8000/api/tasks/parse
+Content-Type: application/json
+
+{
+  "text": "Finish the Q4 report by EOD Friday and share with Sarah."
+}
+
+###
